@@ -988,7 +988,7 @@
             // For word problems, add drag and drop interface
             if (q.wordProblem) {
                 const numbers = extractNumbersFromProblem(q);
-                const operator = getOperatorFromType(q);
+                const operatorInfo = getOperatorInfo(q);
                 
                 html += `
                     <div class="build-exercise">
@@ -999,9 +999,28 @@
                             ).join('')}
                         </div>
                         <div class="exercise-builder">
-                            <div class="drop-zone" data-position="first"></div>
-                            <div class="operator-zone">${operator}</div>
-                            <div class="drop-zone" data-position="second"></div>
+                `;
+                
+                // Build the exercise template based on operation type
+                if (operatorInfo.operators.length === 1) {
+                    // Simple operation (×, ÷, single + or -)
+                    html += `
+                        <div class="drop-zone" data-position="first"></div>
+                        <div class="operator-zone">${operatorInfo.operators[0]}</div>
+                        <div class="drop-zone" data-position="second"></div>
+                    `;
+                } else {
+                    // Complex operation (multiple operators)
+                    html += `
+                        <div class="drop-zone" data-position="first"></div>
+                        <div class="operator-zone">${operatorInfo.operators[0]}</div>
+                        <div class="drop-zone" data-position="second"></div>
+                        <div class="operator-zone">${operatorInfo.operators[1]}</div>
+                        <div class="drop-zone" data-position="third"></div>
+                    `;
+                }
+                
+                html += `
                             <div class="operator-zone">=</div>
                             <div class="operator-zone">?</div>
                         </div>
@@ -1063,12 +1082,22 @@
             return [];
         }
 
-        function getOperatorFromType(question) {
-            if (question.question.includes('×')) return '×';
-            if (question.question.includes('÷')) return '÷';
-            if (question.question.includes('+')) return '+';
-            if (question.question.includes('-')) return '-';
-            return '';
+        function getOperatorInfo(question) {
+            const questionText = question.question;
+            if (questionText.includes('+') && questionText.includes('-')) {
+                // Complex operation with multiple operators
+                const match = questionText.match(/(\d+)\s*-\s*(\d+)\s*\+\s*(\d+)/);
+                if (match) return { operators: ['-', '+'], count: 3 };
+            } else if (questionText.includes('×')) {
+                return { operators: ['×'], count: 2 };
+            } else if (questionText.includes('÷')) {
+                return { operators: ['÷'], count: 2 };
+            } else if (questionText.includes('+')) {
+                return { operators: ['+'], count: 2 };
+            } else if (questionText.includes('-')) {
+                return { operators: ['-'], count: 2 };
+            }
+            return { operators: [], count: 0 };
         }
 
         function initializeDragAndDrop() {
@@ -1131,9 +1160,10 @@
                 e.target.classList.add('filled');
                 draggedElement.remove();
                 
-                // Check if both zones are filled
+                // Check if all zones are filled
+                const allZones = document.querySelectorAll('.drop-zone');
                 const filledZones = document.querySelectorAll('.drop-zone.filled');
-                if (filledZones.length === 2) {
+                if (filledZones.length === allZones.length) {
                     document.querySelector('.check-exercise-btn').disabled = false;
                 }
             }
@@ -1141,35 +1171,53 @@
 
         function checkExerciseBuilder() {
             const q = questions[currentQuestionIndex];
-            const firstZone = document.querySelector('.drop-zone[data-position="first"]');
-            const secondZone = document.querySelector('.drop-zone[data-position="second"]');
-            
-            const firstValue = parseInt(firstZone.textContent);
-            const secondValue = parseInt(secondZone.textContent);
-            
-            // Extract expected values from the question
-            const match = q.question.match(/(\d+)\s*[×÷+-]\s*(\d+)/);
-            const expectedFirst = parseInt(match[1]);
-            const expectedSecond = parseInt(match[2]);
+            const operatorInfo = getOperatorInfo(q);
+            const zones = document.querySelectorAll('.drop-zone');
             
             let isCorrect = false;
-            const operator = getOperatorFromType(q);
             
-            // For addition and multiplication, order doesn't matter
-            if (operator === '+' || operator === '×') {
-                isCorrect = (firstValue === expectedFirst && secondValue === expectedSecond) ||
-                           (firstValue === expectedSecond && secondValue === expectedFirst);
+            if (operatorInfo.count === 3) {
+                // Complex operation with 3 numbers
+                const firstValue = parseInt(zones[0].textContent);
+                const secondValue = parseInt(zones[1].textContent);
+                const thirdValue = parseInt(zones[2].textContent);
+                
+                // For the specific pattern: X - Y + Z
+                const match = q.question.match(/(\d+)\s*-\s*(\d+)\s*\+\s*(\d+)/);
+                const expectedFirst = parseInt(match[1]);
+                const expectedSecond = parseInt(match[2]);
+                const expectedThird = parseInt(match[3]);
+                
+                isCorrect = firstValue === expectedFirst && 
+                           secondValue === expectedSecond && 
+                           thirdValue === expectedThird;
             } else {
-                // For subtraction and division, order matters
-                isCorrect = firstValue === expectedFirst && secondValue === expectedSecond;
+                // Simple operation with 2 numbers
+                const firstValue = parseInt(zones[0].textContent);
+                const secondValue = parseInt(zones[1].textContent);
+                
+                const match = q.question.match(/(\d+)\s*[×÷+-]\s*(\d+)/);
+                const expectedFirst = parseInt(match[1]);
+                const expectedSecond = parseInt(match[2]);
+                
+                const operator = operatorInfo.operators[0];
+                
+                // For addition and multiplication, order doesn't matter
+                if (operator === '+' || operator === '×') {
+                    isCorrect = (firstValue === expectedFirst && secondValue === expectedSecond) ||
+                               (firstValue === expectedSecond && secondValue === expectedFirst);
+                } else {
+                    // For subtraction and division, order matters
+                    isCorrect = firstValue === expectedFirst && secondValue === expectedSecond;
+                }
             }
             
             if (isCorrect) {
                 // Correct exercise built
-                firstZone.style.borderColor = '#4caf50';
-                firstZone.style.background = '#e8f5e9';
-                secondZone.style.borderColor = '#4caf50';
-                secondZone.style.background = '#e8f5e9';
+                zones.forEach(zone => {
+                    zone.style.borderColor = '#4caf50';
+                    zone.style.background = '#e8f5e9';
+                });
                 
                 setTimeout(() => {
                     document.getElementById('exerciseResult').style.display = 'block';
@@ -1178,19 +1226,19 @@
                 }, 1000);
             } else {
                 // Wrong exercise
-                firstZone.style.borderColor = '#dc3545';
-                firstZone.style.background = '#f8d7da';
-                secondZone.style.borderColor = '#dc3545';
-                secondZone.style.background = '#f8d7da';
+                zones.forEach(zone => {
+                    zone.style.borderColor = '#dc3545';
+                    zone.style.background = '#f8d7da';
+                });
                 
                 // Show reset button
                 document.querySelector('.reset-exercise-btn').style.display = 'inline-block';
                 
                 setTimeout(() => {
-                    firstZone.style.borderColor = '#667eea';
-                    firstZone.style.background = '#f0f4ff';
-                    secondZone.style.borderColor = '#667eea';
-                    secondZone.style.background = '#f0f4ff';
+                    zones.forEach(zone => {
+                        zone.style.borderColor = '#667eea';
+                        zone.style.background = '#f0f4ff';
+                    });
                 }, 1000);
             }
         }
